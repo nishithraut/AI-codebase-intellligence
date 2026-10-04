@@ -1,0 +1,4 @@
+
+
+### Post request to check the connection
+POST http://localhost:5000/api/test/data
