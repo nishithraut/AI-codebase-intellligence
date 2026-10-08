@@ -7,7 +7,7 @@ import Register from "../components/signup/Signup";
 // Main pages
 import Dashboard from "../pages/dashboard/Dashboard";
 import Repositories from "../pages/repositories/Repositories";
-// import RepositoryDetails from "../pages/repositories/RepositoryDetails";
+import RepositoryDetails from "../pages/repositories/RepositoryDetails";
 // import CodeSearch from "../pages/repositories/CodeSearch";
 // import Chat from "../pages/repositories/Chat";
 // import AgentActivity from "../pages/repositories/AgentActivity";
@@ -32,7 +32,12 @@ const AppRoutes = () => {
           <Route path="/dashboard" element={<Dashboard />} />
 
           <Route path="/repositories" element={<Repositories />} />
-          {/* <Route path="/repositories" element={<Repositories />} />
+
+          <Route
+            path="/repositories/:repositoryId"
+            element={<RepositoryDetails />}
+          />
+          {/* 
 
           <Route
             path="/repositories/:repositoryId"

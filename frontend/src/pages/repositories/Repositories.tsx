@@ -1,5 +1,5 @@
 import { useState } from "react";
-import RepositoryList from "./RepositoryList";
+import RepositoryList from "../../components/repository/RepositoryList";
 
 const Repositories = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -10,7 +10,7 @@ const Repositories = () => {
 
   return (
     <div className="min-h-screen bg-black">
-      <div className="mx-auto max-w-6xl px-6 pt-20 pb-10">
+      <div className="mx-auto max-w-6xl px-6 pt-0 pb-10">
 
         {/* Header */}
         <div className="flex items-center justify-between">

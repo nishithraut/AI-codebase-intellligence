@@ -1,0 +1,2 @@
+backend/src/seed.ts is a file use to delete the database and init with predefined data,
+only to be use in initial phase of development to check the database connection and the rendering of backend data on frontend

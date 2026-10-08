@@ -12,7 +12,7 @@ const AppLayout = () => {
         <Sidebar/>
 
         {/* main content */}
-        <main className="min-h-screen pt-0 pl-64">
+        <main className="min-h-screen pt-20 pl-64">
           <Outlet />
         </main>
       
