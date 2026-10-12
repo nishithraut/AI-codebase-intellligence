@@ -9,6 +9,7 @@ export interface Repository {
   userId: string;
   name: string;
   url: string;
+  language: string;
 }
 
 export interface RepositoryResponse {

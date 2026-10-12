@@ -1,28 +1,66 @@
-interface Repository {
-  name: string;
-  language: string;
-  status: "Indexed" | "Indexing...";
-}
 
-const repositories: Repository[] = [
-  {
-    name: "project-a",
-    language: "React/TS",
-    status: "Indexed",
-  },
-  {
-    name: "project-b",
-    language: "Python",
-    status: "Indexing...",
-  },
-  {
-    name: "project-c",
-    language: "Node",
-    status: "Indexed",
-  },
-];
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+
+import {
+  getRepositories,
+  type Repository,
+} from "../../services/repositoryApi";
+
 
 const RecentRepositories = () => {
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchRepositories = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await getRepositories();
+
+        if (!cancelled) {
+          // Sort newest first, then show only the latest three.
+          const sorted = [...data].sort((a, b) => {
+            const dateA = new Date(
+              a.updatedAt || a.createdAt || 0
+            ).getTime();
+
+            const dateB = new Date(
+              b.updatedAt || b.createdAt || 0
+            ).getTime();
+
+            return dateB - dateA;
+          });
+
+          setRepositories(sorted.slice(0, 3));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load repositories"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchRepositories();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section>
       <div className="mb-4">
@@ -51,80 +89,90 @@ const RecentRepositories = () => {
           </span>
         </div>
 
+        {/* Loading state */}
+        {loading && (
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm text-zinc-500">
+              Loading repositories...
+            </p>
+          </div>
+        )}
+
+        {/* Error state */}
+        {!loading && error && (
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
         {/* Repository Rows */}
-        {repositories.map((repo) => (
-          <div
-            key={repo.name}
-            className="
-              grid
-              grid-cols-3
-              items-center
-              border-b
-              border-white/5
-              px-5
-              py-4
-              transition
-              duration-200
-              last:border-b-0
-              hover:bg-white/[0.03]
-            "
-          >
-            {/* Repository */}
-            <div className="flex items-center gap-3">
-              <div className="
-                flex
-                h-8
-                w-8
+        {!loading && !error && repositories.length > 0 &&
+          repositories.map((repo) => (
+            <Link
+              key={repo._id}
+              to={`/repositories/${repo._id}`}
+              className="
+                grid
+                grid-cols-3
                 items-center
-                justify-center
-                rounded-lg
-                bg-white/5
-                text-xs
-                text-zinc-400
-              ">
-                ◈
+                border-b
+                border-white/5
+                px-5
+                py-4
+                transition
+                duration-200
+                last:border-b-0
+                hover:bg-white/[0.03]
+              "
+            >
+              {/* Repository */}
+              <div className="flex min-w-0 items-center gap-3">
+                <div
+                  className="
+                    flex
+                    h-8
+                    w-8
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-lg
+                    bg-white/5
+                    text-xs
+                    text-zinc-400
+                  "
+                >
+                  ◈
+                </div>
+
+                <span className="truncate text-sm font-medium text-zinc-200">
+                  {repo.name}
+                </span>
               </div>
 
-              <span className="text-sm font-medium text-zinc-200">
-                {repo.name}
+              {/* Language */}
+              <span className="truncate text-sm text-zinc-500">
+                {repo.language || "Unknown"}
               </span>
-            </div>
 
-            {/* Language */}
-            <span className="text-sm text-zinc-500">
-              {repo.language}
-            </span>
+              {/* Connection status */}
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
 
-            {/* Status */}
-            <div className="flex items-center gap-2">
-              <span
-                className={`
-                  h-1.5
-                  w-1.5
-                  rounded-full
-                  ${
-                    repo.status === "Indexed"
-                      ? "bg-green-500"
-                      : "animate-pulse bg-yellow-500"
-                  }
-                `}
-              />
+                <span className="text-sm text-zinc-400">
+                  Connected
+                </span>
+              </div>
+            </Link>
+          ))}
 
-              <span
-                className={`
-                  text-sm
-                  ${
-                    repo.status === "Indexed"
-                      ? "text-zinc-400"
-                      : "text-yellow-500"
-                  }
-                `}
-              >
-                {repo.status}
-              </span>
-            </div>
+        {/* Empty state */}
+        {!loading && !error && repositories.length === 0 && (
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm text-zinc-500">
+              No repositories connected yet.
+            </p>
           </div>
-        ))}
+        )}
       </div>
     </section>
   );

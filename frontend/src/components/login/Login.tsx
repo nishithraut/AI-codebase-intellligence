@@ -1,24 +1,35 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 const Login = () => {
+
+  const { login } = useAuth();
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
+    setSubmitting(true);
 
-    console.log({
-      email,
-      password,
-    });
+    try {
+      await login(email, password);
+      navigate("/dashboard", { replace: true});
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Login failed."
+      );
+    } finally {
+      setSubmitting(false);
+    }
 
-    // TODO: Call login API here
-
-    navigate("/dashboard");
   };
 
   return (
@@ -131,9 +142,19 @@ const Login = () => {
               />
             </div>
 
+
+            {/* Error */}
+            {error && (
+              <p role="alert" className="text-sm text-red-400">
+                {error}
+              </p>
+            )}
+
+
             {/* Submit */}
             <button
               type="submit"
+              disabled={submitting}
               className="
                 w-full
                 rounded-lg
@@ -148,7 +169,7 @@ const Login = () => {
                 active:scale-[0.98]
               "
             >
-              Sign In
+              {submitting ? "Signing in..." : "Sign in"}
             </button>
 
           </form>

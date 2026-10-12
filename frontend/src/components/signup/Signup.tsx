@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -9,22 +10,33 @@ const Signup = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const { register } = useAuth();
+
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
 
     if (password !== confirmPassword) {
       alert("Passwords do not match");
       return;
     }
 
-    console.log({
-      email,
-      password,
-    });
+    setSubmitting(true);
 
-    // TODO: Call signup API here
-
-    navigate("/dashboard");
+    try {
+      await register(name, email, password);
+      navigate("/dashboard", {replace: true });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Registration failed."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -53,6 +65,27 @@ const Signup = () => {
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl">
 
           <form onSubmit={handleSubmit} className="space-y-5">
+
+            {/* Name */}
+            <div>
+              <label
+                htmlFor="name"
+                className="mb-2 block text-sm font-medium text-zinc-300"
+              >
+                Full name
+              </label>
+
+              <input
+                id="name"
+                type="text"
+                placeholder="Your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="name"
+                className="w-full rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition duration-300 placeholder:text-zinc-700 focus:border-white/30 focus:bg-white/[0.05]"
+              />
+            </div>
 
             {/* Email */}
             <div>
@@ -171,9 +204,17 @@ const Signup = () => {
               />
             </div>
 
+            {/* Error */}
+            {error && (
+              <p role="alert" className="text-sm text-red-400">
+                {error}
+              </p>
+            )}
+
             {/* Submit */}
             <button
               type="submit"
+              disabled={submitting}
               className="
                 w-full
                 rounded-lg
@@ -188,7 +229,7 @@ const Signup = () => {
                 active:scale-[0.98]
               "
             >
-              Create Account
+              {submitting ? "Creating account..." : "Create Account"}
             </button>
 
           </form>

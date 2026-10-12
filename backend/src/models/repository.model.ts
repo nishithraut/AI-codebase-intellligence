@@ -4,6 +4,7 @@ export interface IRepository extends Document {
   userId: mongoose.Types.ObjectId;
   name: string;
   url: string;
+  language: string;
 }
 
 const repositorySchema = new Schema<IRepository>({
@@ -19,6 +20,11 @@ const repositorySchema = new Schema<IRepository>({
   },
 
   url: {
+    type: String,
+    required: true
+  },
+
+  language: {
     type: String,
     required: true
   }

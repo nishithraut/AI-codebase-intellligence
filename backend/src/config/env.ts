@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import { z } from "zod";
 
@@ -9,8 +10,8 @@ const envSchema = z.object({
     .default("development"),
 
   FRONTEND_URL: z.string().url(),
-
-  MONGODB_URI: z.string().min(1)
+  MONGODB_URI: z.string().min(1),
+  JWT_SECRET: z.string().min(32),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

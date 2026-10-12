@@ -1,4 +1,28 @@
 
 
 ### Post request to check the connection
-POST http://localhost:5000/api/test/data
+# POST http://localhost:5000/api/test/data
+
+# POST http://localhost:5000/api/auth/register
+# Content-Type: application/json
+
+# {
+#     "name": "test user",
+#     "email": "test@example.com",
+#     "password": "testpassword@!23"
+# }
+
+# POST http://localhost:5000/api/auth/login
+# Content-Type: application/json
+
+# {
+#   "email": "nishith@example.com",
+#   "password": "DevPass123!"
+# }
+
+# GET http://localhost:5000/api/auth/me
+# Cookie: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2YWM0MDk3NzlkNGE3ZTMyNWRjYTRmNWMiLCJpYXQiOjE3OTE2MTQ3OTksImV4cCI6MTc5MjIxOTU5OX0.TzqPPzaMOmxdUuN6-zFqHn182mqZB7nYgU-5gp4uwu8; Max-Age=604800; Path=/; Expires=Sat, 17 Oct 2026 06:46:39 GMT; HttpOnly; SameSite=Lax
+
+# POST http://localhost:5000/api/auth/logout
+
+GET http://localhost:5000/api/repositories

@@ -1,98 +1,76 @@
+
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-
-export interface Repository {
-  id: string;
-  name: string;
-  language: string;
-  status: "Indexed" | "Indexing";
-  updated: string;
-}
-
-const repositories: Repository[] = [
-  {
-    id: "1",
-    name: "my-project",
-    language: "TypeScript",
-    status: "Indexed",
-    updated: "Today",
-  },
-  {
-    id: "2",
-    name: "backend-api",
-    language: "Python",
-    status: "Indexing",
-    updated: "Yesterday",
-  },
-  {
-    id: "3",
-    name: "frontend",
-    language: "React",
-    status: "Indexed",
-    updated: "Sep 25",
-  },
-  {
-    id: "4",
-    name: "auth-service",
-    language: "Node.js",
-    status: "Indexed",
-    updated: "Sep 24",
-  },
-  {
-    id: "5",
-    name: "payment-service",
-    language: "Java",
-    status: "Indexed",
-    updated: "Sep 23",
-  },
-  {
-    id: "6",
-    name: "ml-pipeline",
-    language: "Python",
-    status: "Indexing",
-    updated: "Sep 22",
-  },
-  {
-    id: "7",
-    name: "mobile-app",
-    language: "React Native",
-    status: "Indexed",
-    updated: "Sep 20",
-  },
-  {
-    id: "8",
-    name: "notification-service",
-    language: "Go",
-    status: "Indexed",
-    updated: "Sep 18",
-  },
-  {
-    id: "9",
-    name: "analytics-engine",
-    language: "Rust",
-    status: "Indexed",
-    updated: "Sep 15",
-  },
-  {
-    id: "10",
-    name: "devops-config",
-    language: "Docker",
-    status: "Indexed",
-    updated: "Sep 12",
-  },
-];
+import {
+  getRepositories,
+  type Repository,
+} from "../../services/repositoryApi";
 
 interface RepositoryListProps {
   searchQuery: string;
 }
 
+const formatDate = (date?: string): string => {
+  if (!date) return "—";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) return "—";
+
+  return parsedDate.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 const RepositoryList = ({ searchQuery }: RepositoryListProps) => {
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchRepositories = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await getRepositories();
+
+        if (!cancelled) {
+          setRepositories(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load repositories"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchRepositories();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Search the repositories returned by the backend.
   const filteredRepositories = repositories.filter((repo) =>
     repo.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/10">
-
       {/* Table Header */}
       <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr] border-b border-white/10 bg-white/[0.02] px-5 py-3">
         <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
@@ -112,13 +90,30 @@ const RepositoryList = ({ searchQuery }: RepositoryListProps) => {
         </span>
       </div>
 
-      {/* Scrollable Repository List */}
+      {/* Repository List */}
       <div className="max-h-[520px] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-800">
-        {filteredRepositories.length > 0 ? (
+        {loading ? (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-zinc-500">
+              Loading repositories...
+            </p>
+          </div>
+        ) : error ? (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-red-400">{error}</p>
+
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-3 text-sm text-zinc-300 underline"
+            >
+              Try again
+            </button>
+          </div>
+        ) : filteredRepositories.length > 0 ? (
           filteredRepositories.map((repo) => (
             <Link
-              key={repo.id}
-              to={`/repositories/${repo.id}`}
+              key={repo._id}
+              to={`/repositories/${repo._id}`}
               className="
                 grid
                 grid-cols-[2fr_1.5fr_1fr_1fr]
@@ -133,7 +128,7 @@ const RepositoryList = ({ searchQuery }: RepositoryListProps) => {
                 hover:bg-white/[0.04]
               "
             >
-              {/* Repository */}
+              {/* Repository name */}
               <div className="flex items-center gap-3">
                 <div
                   className="
@@ -152,55 +147,38 @@ const RepositoryList = ({ searchQuery }: RepositoryListProps) => {
                   ◈
                 </div>
 
-                <span className="text-sm font-medium text-zinc-200">
+                <span className="break-all text-sm font-medium text-zinc-200">
                   {repo.name}
                 </span>
               </div>
 
-              {/* Language */}
+              {/* Language stored in MongoDB */}
               <span className="text-sm text-zinc-500">
-                {repo.language}
+                {repo.language || "Unknown"}
               </span>
 
-              {/* Status */}
+              {/* A saved repository is connected.
+                  This does not mean its code has been indexed. */}
               <div className="flex items-center gap-2">
-                <span
-                  className={`
-                    h-1.5
-                    w-1.5
-                    rounded-full
-                    ${
-                      repo.status === "Indexed"
-                        ? "bg-green-500"
-                        : "animate-pulse bg-yellow-500"
-                    }
-                  `}
-                />
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
 
-                <span
-                  className={`
-                    text-sm
-                    ${
-                      repo.status === "Indexed"
-                        ? "text-zinc-400"
-                        : "text-yellow-500"
-                    }
-                  `}
-                >
-                  {repo.status}
+                <span className="text-sm text-zinc-400">
+                  Connected
                 </span>
               </div>
 
-              {/* Updated */}
+              {/* Use the stored update date when available */}
               <span className="text-sm text-zinc-600">
-                {repo.updated}
+                {formatDate(repo.updatedAt || repo.createdAt)}
               </span>
             </Link>
           ))
         ) : (
           <div className="px-5 py-12 text-center">
             <p className="text-sm text-zinc-500">
-              No repositories found.
+              {repositories.length === 0
+                ? "You haven't connected any repositories yet."
+                : "No repositories found."}
             </p>
           </div>
         )}

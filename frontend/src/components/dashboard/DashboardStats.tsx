@@ -1,28 +1,28 @@
-interface Stat {
-  label: string;
-  value: string;
-  description?: string;
+interface DashboardStatsProps {
+  repositoryCount: number;
 }
 
-const stats: Stat[] = [
-  {
-    label: "Repositories",
-    value: "3",
-    description: "Connected",
-  },
-  {
-    label: "Questions",
-    value: "128",
-    description: "Asked",
-  },
-  {
-    label: "Usage",
-    value: "42%",
-    description: "This month",
-  },
-];
+const DashboardStats = ({
+  repositoryCount,
+}: DashboardStatsProps) => {
+  const stats = [
+    {
+      label: "Repositories",
+      value: String(repositoryCount),
+      description: "Connected",
+    },
+    {
+      label: "Questions",
+      value: "—",
+      description: "Not available yet",
+    },
+    {
+      label: "Usage",
+      value: "—",
+      description: "Not available yet",
+    },
+  ];
 
-const DashboardStats = () => {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {stats.map((stat) => (
