@@ -7,28 +7,30 @@ export interface IRepository extends Document {
   language: string;
 }
 
-const repositorySchema = new Schema<IRepository>({
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: "User",
-    required: true
+const repositorySchema = new Schema<IRepository>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    url: {
+      type: String,
+      required: true,
+    },
+    language: {
+      type: String,
+      required: true,
+    },
   },
-
-  name: {
-    type: String,
-    required: true
-  },
-
-  url: {
-    type: String,
-    required: true
-  },
-
-  language: {
-    type: String,
-    required: true
+  {
+    timestamps: true,
   }
-});
+);
 
 export const Repository = mongoose.model<IRepository>(
   "Repository",

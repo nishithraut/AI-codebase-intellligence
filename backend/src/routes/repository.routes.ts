@@ -1,9 +1,12 @@
 import { Router } from "express";
 
-import { getRepositories, getRepository } from "../controllers/repository.controller.js";
+import { connectRepository, getRepositories, getRepository } from "../controllers/repository.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 const router = Router();
+
+// Connect a pulbic Github repo for the logged-in user
+router.post("/", requireAuth, connectRepository)
 
 // GET /api/repositories
 // Fetch all repositories belonging to the logged-in user.

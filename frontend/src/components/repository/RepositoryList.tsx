@@ -8,6 +8,7 @@ import {
 
 interface RepositoryListProps {
   searchQuery: string;
+  refreshKey: number;
 }
 
 const formatDate = (date?: string): string => {
@@ -24,7 +25,10 @@ const formatDate = (date?: string): string => {
   });
 };
 
-const RepositoryList = ({ searchQuery }: RepositoryListProps) => {
+const RepositoryList = ({
+  searchQuery,
+  refreshKey,
+}: RepositoryListProps) => {
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,7 +66,7 @@ const RepositoryList = ({ searchQuery }: RepositoryListProps) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   // Search the repositories returned by the backend.
   const filteredRepositories = repositories.filter((repo) =>

@@ -1,4 +1,3 @@
-
 const API_URL =
   import.meta.env.VITE_API_URL ?? "http://localhost:5000/api";
 
@@ -33,10 +32,19 @@ export interface RepositoryResponse {
   };
 }
 
+interface ConnectRepositoryResponse {
+  success: boolean;
+  message: string;
+  data: {
+    repository: Repository;
+  };
+}
+
+
 /**
  * Fetch all repositories owned by the logged-in user.
  * Used by the Repositories page.
- */
+*/
 export const getRepositories = async (): Promise<Repository[]> => {
   const response = await fetch(`${API_URL}/repositories`, {
     method: "GET",
@@ -74,4 +82,37 @@ export const getRepository = async (
   }
 
   return result as RepositoryResponse;
+};
+
+interface ConnectRepositoryResponse {
+  success: boolean;
+  message: string;
+  data: {
+    repository: Repository;
+  };
+}
+
+/**
+ * Connect a public GitHub repository to the logged-in user's account.
+ * The backend validates the URL and retrieves the repository metadata.
+ */
+export const connectRepository = async (
+  url: string
+): Promise<Repository> => {
+  const response = await fetch(`${API_URL}/repositories`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ url }),
+  });
+
+  const result = (await response.json()) as ConnectRepositoryResponse;
+
+  if (!response.ok) {
+    throw new Error(result.message || "Failed to connect repository.");
+  }
+
+  return result.data.repository;
 };
