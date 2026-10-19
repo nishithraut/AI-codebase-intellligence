@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import RepositoryHeader from "../../components/repository/RepositoryHeader";
 import RepositoryTree from "../../components/repository/RepositoryTree";
 import CodeViewer from "../../components/repository/CodeViewer";
+import RepositoryChat from "../../components/repository/RepositoryChat"
 
 import { getRepository } from "../../services/repositoryApi";
 
@@ -14,6 +15,9 @@ import type {
 
 const RepositoryDetails = () => {
   const { repositoryId } = useParams<{ repositoryId: string }>();
+
+  const [searchParams] = useSearchParams();
+  const conversationId = searchParams.get("conversationId");
 
   const [repository, setRepository] =
     useState<Repository | null>(null);
@@ -103,6 +107,13 @@ const RepositoryDetails = () => {
 
           </div>
         </section>
+
+        {repository && (
+          <RepositoryChat
+            repositoryId={repository._id}
+            initialConversationId={conversationId}
+          />
+        )}
 
       </div>
     </main>

@@ -1,3 +1,4 @@
+
 export interface RepositoryFile {
   _id: string;
   path: string;
@@ -9,7 +10,7 @@ export interface Repository {
   userId: string;
   name: string;
   url: string;
-  language: string;
+  language?: string;
 }
 
 export interface RepositoryResponse {

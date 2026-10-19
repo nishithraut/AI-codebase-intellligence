@@ -40,6 +40,41 @@ interface ConnectRepositoryResponse {
   };
 }
 
+export type RepositoryIndexStatus =
+  | "not_indexed"
+  | "indexing"
+  | "completed"
+  | "failed"
+  | "unknown";
+
+export const getRepositoryIndexStatus = async (
+  repositoryId: string
+): Promise<RepositoryIndexStatus> => {
+  const response = await fetch(
+    `${API_URL}/repositories/${encodeURIComponent(repositoryId)}/index-status`,
+    {
+      method: "GET",
+      credentials: "include",
+    }
+  );
+
+  const result = (await response.json()) as {
+    success: boolean;
+    message?: string;
+    data?: {
+      status: RepositoryIndexStatus;
+    };
+  };
+
+  if (!response.ok || !result.success || !result.data) {
+    throw new Error(
+      result.message || "Failed to retrieve indexing status."
+    );
+  }
+
+  return result.data.status;
+};
+
 
 /**
  * Fetch all repositories owned by the logged-in user.

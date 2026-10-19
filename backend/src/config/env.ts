@@ -12,6 +12,9 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url(),
   MONGODB_URI: z.string().min(1),
   JWT_SECRET: z.string().min(32),
+
+  PYTHON_API_URL: z.string().url(),
+  INTERNAL_API_SECRET: z.string().min(32),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

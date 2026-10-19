@@ -8,8 +8,8 @@ import Signup from "../components/signup/Signup";
 import Dashboard from "../pages/dashboard/Dashboard";
 import Repositories from "../pages/repositories/Repositories";
 import RepositoryDetails from "../pages/repositories/RepositoryDetails";
+import Chat from "../pages/chat/Chat";
 // import CodeSearch from "../pages/repositories/CodeSearch";
-// import Chat from "../pages/repositories/Chat";
 // import AgentActivity from "../pages/repositories/AgentActivity";
 // import Conversations from "../pages/conversations/Conversations";
 // import Usage from "../pages/usage/Usage";
@@ -36,7 +36,7 @@ const AppRoutes = () => {
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/repositories" element={<Repositories />} />
-
+            <Route path="/chat" element={<Chat />} />
             <Route
               path="/repositories/:repositoryId"
               element={<RepositoryDetails />}

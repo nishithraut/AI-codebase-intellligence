@@ -1,4 +1,4 @@
-
+import { env } from "../config/env.js";
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
@@ -15,6 +15,29 @@ interface GitHubRepositoryResponse {
   language: string | null;
 }
 
+const triggerPythonIndexing = async (
+  repositoryId: string,
+  userId: string,
+): Promise<void> => {
+  const response = await fetch(
+    `${env.PYTHON_API_URL}/api/v1/repositories/${encodeURIComponent(repositoryId)}/index`,
+    {
+      method: "POST",
+      headers: {
+        "X-Internal-Api-Secret": env.INTERNAL_API_SECRET,
+        "X-User-Id": userId,
+      },
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+
+    throw new Error(`Python indexing failed (${response.status}): ${message}`);
+  }
+};
+
 /**
  * FUNCTION: connectRepository()
  *
@@ -30,7 +53,7 @@ interface GitHubRepositoryResponse {
  */
 export const connectRepository = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const userId = res.locals.userId as string;
@@ -98,7 +121,10 @@ export const connectRepository = async (
 
     try {
       owner = decodeURIComponent(ownerPart);
-      repositoryName = decodeURIComponent(repositoryPart).replace(/\.git$/i, "");
+      repositoryName = decodeURIComponent(repositoryPart).replace(
+        /\.git$/i,
+        "",
+      );
     } catch {
       res.status(400).json({
         success: false,
@@ -128,7 +154,7 @@ export const connectRepository = async (
           Accept: "application/vnd.github+json",
           "User-Agent": "ai-intelligence-codebase",
         },
-      }
+      },
     );
 
     if (githubResponse.status === 404) {
@@ -143,7 +169,8 @@ export const connectRepository = async (
     if (githubResponse.status === 403) {
       res.status(502).json({
         success: false,
-        message: "GitHub API rate limit or access restriction encountered. Try again later.",
+        message:
+          "GitHub API rate limit or access restriction encountered. Try again later.",
       });
       return;
     }
@@ -195,14 +222,24 @@ export const connectRepository = async (
     const ingestion = await ingestGitHubRepository(
       repository._id,
       owner,
-      repositoryName
+      repositoryName,
+    );
+
+    // Start Python indexing without making the user wait for completion.
+    void triggerPythonIndexing(repository._id.toString(), userId).catch(
+      (error: unknown) => {
+        console.error(
+          `Indexing failed for repository ${repository._id}:`,
+          error,
+        );
+      },
     );
 
     res.status(201).json({
       success: true,
       message: ingestion.partial
-        ? "Repository connected with partial ingestion."
-        : "Repository connected and ingested successfully.",
+        ? "Repository connected with partial ingestion. Indexing started."
+        : "Repository connected. Indexing started.",
       data: {
         repository,
         ingestion,
@@ -236,7 +273,7 @@ export const connectRepository = async (
  */
 export const getRepositories = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     // Get the ID of the currently authenticated user.
@@ -284,7 +321,7 @@ export const getRepositories = async (
  */
 export const getRepository = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     // Read the repository ID from the URL.
@@ -342,6 +379,93 @@ export const getRepository = async (
     res.status(500).json({
       success: false,
       message: "Failed to fetch repository",
+    });
+  }
+};
+
+
+export const getRepositoryIndexStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const repositoryId = req.params.repositoryId;
+    const userId = res.locals.userId as string;
+
+    if (
+      typeof repositoryId !== "string" ||
+      !mongoose.Types.ObjectId.isValid(repositoryId)
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid repository ID.",
+      });
+      return;
+    }
+
+    // Verify ownership before asking Python for the indexing status.
+    const repository = await Repository.findOne({
+      _id: repositoryId,
+      userId,
+    }).select("_id");
+
+    if (!repository) {
+      res.status(404).json({
+        success: false,
+        message: "Repository not found.",
+      });
+      return;
+    }
+
+    const response = await fetch(
+      `${env.PYTHON_API_URL}/api/v1/repositories/${encodeURIComponent(repositoryId)}/index-status`,
+      {
+        method: "GET",
+        headers: {
+          "X-Internal-Api-Secret": env.INTERNAL_API_SECRET,
+          "X-User-Id": userId,
+        },
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Python status request failed (${response.status}).`
+      );
+    }
+
+    const result = (await response.json()) as {
+      success?: boolean;
+      data?: {
+        status?: string;
+      };
+    };
+
+    const pythonStatus = result.data?.status ?? "unknown";
+
+    const statusMap: Record<string, string> = {
+      not_indexed: "not_indexed",
+      queued: "indexing",
+      indexing: "indexing",
+      ready: "completed",
+      completed: "completed",
+      failed: "failed",
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        repositoryId,
+        status: statusMap[pythonStatus] ?? "unknown",
+      },
+    });
+  } catch (error) {
+    console.error("Get repository indexing status error:", error);
+
+    res.status(502).json({
+      success: false,
+      message: "Unable to retrieve indexing status.",
     });
   }
 };

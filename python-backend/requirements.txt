@@ -1,0 +1,12 @@
+
+fastapi
+uvicorn[standard]
+pymongo[srv]
+pydantic-settings
+python-dotenv
+google-genai
+langchain-google-genai
+langgraph
+langgraph-checkpoint-mongodb
+pytest
+httpx
