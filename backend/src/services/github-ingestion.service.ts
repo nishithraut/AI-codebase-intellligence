@@ -1,6 +1,7 @@
 
 import mongoose from "mongoose";
 import { RepositoryFile } from "../models/repository-file.model.js";
+import { githubApiGet } from "./github-api.service.js";
 
 // Initial ingestion limits for the demo version.
 const MAX_FILES = 2_000;
@@ -56,34 +57,10 @@ const EXCLUDED_EXTENSIONS = new Set([
   ".sqlite", ".db", ".pyc",
 ]);
 
-/**
- * Makes a request to GitHub's public API.
- * Throws an error if GitHub rejects the request.
- */
-const githubApiGet = async <T>(url: string): Promise<T> => {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "ai-codebase-intelligence",
-    },
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `GitHub API request failed (${response.status}).`
-    );
-  }
-
-  return (await response.json()) as T;
-};
-
-/**
- * Determines whether a path should be excluded from ingestion.
- */
 const shouldSkipPath = (path: string): boolean => {
   const segments = path.split("/");
   const filename = segments[segments.length - 1] ?? "";
+
   const extension = filename.includes(".")
     ? `.${filename.split(".").pop()!.toLowerCase()}`
     : "";
@@ -96,7 +73,6 @@ const shouldSkipPath = (path: string): boolean => {
     return true;
   }
 
-  // Skip environment files that commonly contain secrets.
   if (
     filename === ".env" ||
     filename.startsWith(".env.") ||
@@ -109,15 +85,11 @@ const shouldSkipPath = (path: string): boolean => {
   return false;
 };
 
-/**
- * Downloads one text file from the selected repository branch.
- * Returns null when the file is binary, too large, or unavailable.
- */
 const downloadTextFile = async (
   owner: string,
   repository: string,
   branch: string,
-  file: GitHubTreeItem
+  file: GitHubTreeItem,
 ): Promise<DownloadedFile | null> => {
   if (
     file.type !== "blob" ||
@@ -129,7 +101,13 @@ const downloadTextFile = async (
     return null;
   }
 
-  const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${branch.split("/").map(encodeURIComponent).join("/")}/${file.path.split("/").map(encodeURIComponent).join("/")}`;
+  const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/${branch
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/")}/${file.path
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/")}`;
 
   const response = await fetch(rawUrl, {
     headers: {
@@ -142,8 +120,9 @@ const downloadTextFile = async (
     throw new Error(`Could not download ${file.path}.`);
   }
 
-  // Check the actual response size before reading the body.
-  const contentLength = Number(response.headers.get("content-length"));
+  const contentLength = Number(
+    response.headers.get("content-length"),
+  );
 
   if (
     Number.isFinite(contentLength) &&
@@ -158,12 +137,13 @@ const downloadTextFile = async (
   if (
     buffer.byteLength > MAX_FILE_SIZE_BYTES ||
     bytes.includes(0)
-   ) {
+  ) {
     return null;
   }
 
-  // Only store valid UTF-8 text, not arbitrary binary data.
-  const content = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  const content = new TextDecoder("utf-8", {
+    fatal: true,
+  }).decode(buffer);
 
   return {
     path: file.path,
@@ -172,32 +152,33 @@ const downloadTextFile = async (
   };
 };
 
-/**
- * Downloads eligible files and stores them in MongoDB.
- * Existing file records are replaced only after the new batch is ready.
- */
 export const ingestGitHubRepository = async (
   repositoryId: mongoose.Types.ObjectId,
   owner: string,
-  repositoryName: string
+  repositoryName: string,
 ): Promise<IngestionResult> => {
-  const encodedRepository = `${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`;
+  const encodedRepository =
+    `${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`;
 
+  // Fetch repository metadata using the centralized GitHub API client.
   const metadata = await githubApiGet<GitHubRepositoryMetadata>(
-    `https://api.github.com/repos/${encodedRepository}`
+    `/repos/${encodedRepository}`,
   );
 
   const branch = metadata.default_branch;
 
+  // Fetch the complete repository tree.
+  const encodedBranch = branch
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+
   const treeResponse = await githubApiGet<GitHubTreeResponse>(
-    `https://api.github.com/repos/${encodedRepository}/git/trees/${branch
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/")}?recursive=1`
+    `/repos/${encodedRepository}/git/trees/${encodedBranch}?recursive=1`,
   );
 
   const allFiles = treeResponse.tree.filter(
-    (item) => item.type === "blob"
+    (item) => item.type === "blob",
   );
 
   const eligibleFiles = allFiles.filter(
@@ -205,7 +186,7 @@ export const ingestGitHubRepository = async (
       !shouldSkipPath(file.path) &&
       typeof file.size === "number" &&
       file.size > 0 &&
-      file.size <= MAX_FILE_SIZE_BYTES
+      file.size <= MAX_FILE_SIZE_BYTES,
   );
 
   const selectedFiles = eligibleFiles.slice(0, MAX_FILES);
@@ -213,10 +194,12 @@ export const ingestGitHubRepository = async (
   const downloadedFiles: DownloadedFile[] = [];
   let totalBytes = 0;
   let skippedFiles = allFiles.length - selectedFiles.length;
-  let partial = treeResponse.truncated ||
+
+  let partial =
+    treeResponse.truncated ||
     eligibleFiles.length > selectedFiles.length;
 
-  // Process files in small groups to limit simultaneous network requests.
+  // Download files in controlled batches.
   for (
     let start = 0;
     start < selectedFiles.length;
@@ -224,7 +207,7 @@ export const ingestGitHubRepository = async (
   ) {
     const batch = selectedFiles.slice(
       start,
-      start + DOWNLOAD_CONCURRENCY
+      start + DOWNLOAD_CONCURRENCY,
     );
 
     const results = await Promise.all(
@@ -234,16 +217,17 @@ export const ingestGitHubRepository = async (
             owner,
             repositoryName,
             branch,
-            file
+            file,
           );
         } catch (error) {
-          // A single failed download should not abort every other file.
           console.warn(`Skipping ${file.path}:`, error);
+
           partial = true;
           skippedFiles += 1;
+
           return null;
         }
-      })
+      }),
     );
 
     for (const result of results) {
@@ -261,15 +245,17 @@ export const ingestGitHubRepository = async (
       totalBytes += result.size;
     }
 
-    // Stop once the storage budget has been reached.
     if (totalBytes >= MAX_TOTAL_SIZE_BYTES) {
       partial = true;
-      skippedFiles += selectedFiles.length - start - batch.length;
+
+      skippedFiles +=
+        selectedFiles.length - start - batch.length;
+
       break;
     }
   }
 
-  // Save in batches instead of issuing one database write per file.
+  // Store files in MongoDB batches.
   const WRITE_BATCH_SIZE = 100;
 
   for (
@@ -279,7 +265,7 @@ export const ingestGitHubRepository = async (
   ) {
     const batch = downloadedFiles.slice(
       start,
-      start + WRITE_BATCH_SIZE
+      start + WRITE_BATCH_SIZE,
     );
 
     await RepositoryFile.bulkWrite(
@@ -300,12 +286,14 @@ export const ingestGitHubRepository = async (
           },
           upsert: true,
         },
-      }))
+      })),
     );
   }
 
   // Remove stale files that no longer exist in the new ingestion.
-  const storedPaths = downloadedFiles.map((file) => file.path);
+  const storedPaths = downloadedFiles.map(
+    (file) => file.path,
+  );
 
   await RepositoryFile.deleteMany({
     repositoryId,

@@ -1,3 +1,4 @@
+
 import { env } from "../config/env.js";
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
@@ -6,6 +7,10 @@ import { Repository } from "../models/repository.model.js";
 import { RepositoryFile } from "../models/repository-file.model.js";
 
 import { ingestGitHubRepository } from "../services/github-ingestion.service.js";
+import {
+  githubApiGet,
+  GitHubApiError,
+} from "../services/github-api.service.js";
 
 interface GitHubRepositoryResponse {
   name: string;
@@ -39,17 +44,8 @@ const triggerPythonIndexing = async (
 };
 
 /**
- * FUNCTION: connectRepository()
- *
- * PURPOSE:
- * Validates a public GitHub repository URL, fetches its metadata,
- * and saves it under the currently authenticated user.
- *
- * API:
- * POST /api/repositories
- *
- * SECURITY:
- * The owner is taken from res.locals.userId, never from the request body.
+ * Validates a public GitHub repository URL,
+ * fetches its metadata, and saves it under the authenticated user.
  */
 export const connectRepository = async (
   req: Request,
@@ -67,7 +63,6 @@ export const connectRepository = async (
       return;
     }
 
-    // Accept only a GitHub URL pointing directly to owner/repository.
     let parsedUrl: URL;
 
     try {
@@ -105,9 +100,6 @@ export const connectRepository = async (
       return;
     }
 
-    let owner: string;
-    let repositoryName: string;
-
     const ownerPart = pathParts[0];
     const repositoryPart = pathParts[1];
 
@@ -118,6 +110,9 @@ export const connectRepository = async (
       });
       return;
     }
+
+    let owner: string;
+    let repositoryName: string;
 
     try {
       owner = decodeURIComponent(ownerPart);
@@ -146,45 +141,44 @@ export const connectRepository = async (
       return;
     }
 
-    // Fetch repository metadata from GitHub's public API.
-    const githubResponse = await fetch(
-      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "User-Agent": "ai-intelligence-codebase",
-        },
-      },
-    );
+    // Fetch repository metadata using authenticated GitHub API.
+    let githubRepository: GitHubRepositoryResponse;
 
-    if (githubResponse.status === 404) {
-      res.status(404).json({
-        success: false,
-        message:
-          "Repository not found. Check the URL and make sure the repository is public.",
-      });
-      return;
+    try {
+      githubRepository = await githubApiGet<GitHubRepositoryResponse>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
+      );
+    } catch (error) {
+      if (error instanceof GitHubApiError) {
+        if (error.status === 404) {
+          res.status(404).json({
+            success: false,
+            message:
+              "Repository not found. Check the URL and make sure the repository is public.",
+          });
+          return;
+        }
+
+        if (error.status === 401) {
+          res.status(502).json({
+            success: false,
+            message: "GitHub authentication failed. Check your GitHub token.",
+          });
+          return;
+        }
+
+        if (error.status === 403 || error.status === 429) {
+          res.status(502).json({
+            success: false,
+            message:
+              "GitHub API rate limit or access restriction encountered. Check your GitHub token and try again.",
+          });
+          return;
+        }
+      }
+
+      throw error;
     }
-
-    if (githubResponse.status === 403) {
-      res.status(502).json({
-        success: false,
-        message:
-          "GitHub API rate limit or access restriction encountered. Try again later.",
-      });
-      return;
-    }
-
-    if (!githubResponse.ok) {
-      res.status(502).json({
-        success: false,
-        message: "Unable to retrieve repository details from GitHub.",
-      });
-      return;
-    }
-
-    const githubRepository =
-      (await githubResponse.json()) as GitHubRepositoryResponse;
 
     if (githubRepository.private) {
       res.status(400).json({
@@ -194,10 +188,10 @@ export const connectRepository = async (
       return;
     }
 
-    // Use GitHub's canonical URL to keep stored URLs consistent.
+    // Use GitHub's canonical URL.
     const canonicalUrl = githubRepository.html_url.replace(/\/$/, "");
 
-    // Prevent the same user from connecting the same repository twice.
+    // Prevent duplicate repository connections.
     const existingRepository = await Repository.findOne({
       userId,
       url: canonicalUrl,
@@ -211,7 +205,7 @@ export const connectRepository = async (
       return;
     }
 
-    // Save ownership using the authenticated user's ID.
+    // Save repository ownership.
     const repository = await Repository.create({
       userId,
       name: githubRepository.name,
@@ -225,7 +219,7 @@ export const connectRepository = async (
       repositoryName,
     );
 
-    // Start Python indexing without making the user wait for completion.
+    // Start Python indexing without making the user wait.
     void triggerPythonIndexing(repository._id.toString(), userId).catch(
       (error: unknown) => {
         console.error(
@@ -256,36 +250,19 @@ export const connectRepository = async (
 };
 
 /**
- * FUNCTION 1: getRepositories()
- *
- * PURPOSE:
- * Fetches ALL repositories belonging to the currently logged-in user.
- *
- * USED BY:
- * The Repositories page, where the user sees their repository list.
- *
- * API:
- * GET /api/repositories
- *
- * SECURITY:
- * Uses res.locals.userId, which is set by the authentication middleware.
- * It does not return repositories belonging to other users.
+ * Fetches all repositories belonging to the authenticated user.
  */
 export const getRepositories = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    // Get the ID of the currently authenticated user.
     const userId = res.locals.userId as string;
 
-    // Find only repositories owned by this user.
-    // Sorting by newest first makes recently added repositories appear first.
     const repositories = await Repository.find({ userId })
       .sort({ createdAt: -1 })
       .lean();
 
-    // Return the user's repository list.
     res.status(200).json({
       success: true,
       data: {
@@ -303,34 +280,17 @@ export const getRepositories = async (
 };
 
 /**
- * FUNCTION 2: getRepository()
- *
- * PURPOSE:
- * Fetches ONE specific repository and all its stored files.
- *
- * USED BY:
- * The Repository Details page, when the user clicks a repository
- * or opens a URL containing its MongoDB ID.
- *
- * API:
- * GET /api/repositories/:repositoryId
- *
- * SECURITY:
- * Checks both the repository ID and the logged-in user's ID.
- * A user cannot access another user's repository through its ID.
+ * Fetches one repository and its stored files.
+ * Verifies repository ownership before returning data.
  */
 export const getRepository = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    // Read the repository ID from the URL.
     const { repositoryId } = req.params;
-
-    // Get the ID of the currently authenticated user.
     const userId = res.locals.userId as string;
 
-    // Validate the ID before querying MongoDB.
     if (
       typeof repositoryId !== "string" ||
       !mongoose.Types.ObjectId.isValid(repositoryId)
@@ -342,14 +302,11 @@ export const getRepository = async (
       return;
     }
 
-    // Find this repository only if it belongs to the logged-in user.
     const repository = await Repository.findOne({
       _id: repositoryId,
       userId,
     }).lean();
 
-    // Return 404 if the repository does not exist
-    // or does not belong to the logged-in user.
     if (!repository) {
       res.status(404).json({
         success: false,
@@ -358,14 +315,12 @@ export const getRepository = async (
       return;
     }
 
-    // Fetch the files associated with this repository.
     const files = await RepositoryFile.find({
       repositoryId: repository._id,
     })
       .select("_id path content")
       .lean();
 
-    // Return the repository information and its files.
     res.status(200).json({
       success: true,
       data: {
@@ -383,10 +338,12 @@ export const getRepository = async (
   }
 };
 
-
+/**
+ * Fetches Python indexing status after verifying repository ownership.
+ */
 export const getRepositoryIndexStatus = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const repositoryId = req.params.repositoryId;
@@ -403,7 +360,6 @@ export const getRepositoryIndexStatus = async (
       return;
     }
 
-    // Verify ownership before asking Python for the indexing status.
     const repository = await Repository.findOne({
       _id: repositoryId,
       userId,
@@ -426,12 +382,12 @@ export const getRepositoryIndexStatus = async (
           "X-User-Id": userId,
         },
         signal: AbortSignal.timeout(10_000),
-      }
+      },
     );
 
     if (!response.ok) {
       throw new Error(
-        `Python status request failed (${response.status}).`
+        `Python status request failed (${response.status}).`,
       );
     }
 

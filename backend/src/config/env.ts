@@ -15,6 +15,7 @@ const envSchema = z.object({
 
   PYTHON_API_URL: z.string().url(),
   INTERNAL_API_SECRET: z.string().min(32),
+  GITHUB_TOKEN: z.string().min(1).optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
